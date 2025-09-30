@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento de Acesso à Fechadura</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        
+       
+        <header class="text-center py-6">
+            <h1 class="text-3xl font-bold text-gray-800">Controle de Acesso - Fechadura</h1>
+            <p class="text-sm text-gray-500 mt-1">Gerencie os códigos de acesso que a fechadura eletrônica reconhecerá.</p>
+        </header>
+
+      
+        <div id="authSection" class="max-w-md mx-auto bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Login de Administrador</h2>
+            <div class="space-y-4">
+                <input type="email" id="adminEmail" placeholder="Email do Administrador" class="p-3 w-full border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                <input type="password" id="adminPassword" placeholder="Senha" class="p-3 w-full border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mt-4">
+                <button onclick="signInAdmin()" class="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition duration-150 shadow-md">
+                    Entrar
+                </button>
+                <button onclick="registerAdmin()" class="flex-1 px-4 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition duration-150 shadow-md">
+                    Registrar Novo Admin
+                </button>
+            </div>
+            <p id="authMessage" class="mt-3 text-sm text-red-500 text-center"></p>
+        </div>
+
+
+        
+        <div id="managementSection" class="hidden">
+            
+            <div class="flex justify-between items-center bg-gray-200 p-3 rounded-xl mb-4 shadow-sm">
+                <p class="text-sm text-gray-700 font-semibold">Logado como: <span id="adminEmailDisplay" class="font-bold text-blue-700"></span></p>
+                <button onclick="signOutAdmin()" class="px-3 py-1 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition duration-150">
+                    Sair
+                </button>
+            </div>
+
+          
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Cadastrar Novo Código de Acesso (Senha do Portão)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input type="text" id="code" placeholder="CÓDIGO (Ex: A32, 1234)" maxlength="5" class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 col-span-1" required>
+                    <input type="text" id="name" placeholder="Nome do Usuário" class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 col-span-1" required>
+            
+                </div>
+                <button onclick="addCode()" id="addButton" class="mt-4 w-full md:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition duration-150 shadow-md">
+                    Adicionar Código
+                </button>
+                <p id="message" class="mt-3 text-sm text-red-500"></p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Códigos de Acesso Ativos</h2>
+                <div id="codeList" class="space-y-3">
+                   
+                </div>
+                <p id="emptyMessage" class="text-center text-gray-500 mt-6 hidden">Nenhum código de acesso cadastrado.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Confirmar Remoção</h3>
+            <p class="text-gray-600 mb-6">Tem certeza que deseja remover o código <span id="modalCodeDisplay" class="font-bold text-red-500"></span>?</p>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeModal()" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition">Cancelar</button>
+                <button id="confirmRemoveButton" class="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition">Remover</button>
+            </div>
+        </div>
+    </div>
+
+
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+            
+        const appId = typeof __app_id !== 'undefined' ? __app_id : '1:586404594089:web:e942635adde33fb344c4b8';
+        const firebaseConfig = {
+        apiKey: "AIzaSyCm6LZQ7o_5H4Oje_fYWBBFDeW3kT5gxpA",
+        authDomain: "fechadura-eletronica-4a515.firebaseapp.com",
+        projectId: "fechadura-eletronica-4a515",
+        storageBucket: "fechadura-eletronica-4a515.firebasestorage.app",
+        messagingSenderId: "586404594089",
+        appId: "1:586404594089:web:e942635adde33fb344c4b8"
+        };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+       
+        
+
+        const app = initializeApp(firebaseConfig);
+        
+        window.db = null;
+        window.auth = null;
+        window.userId = null;
+        window.ACCESS_PATH = '/access_codes'; 
+        
+        let pendingRemoveCode = null; 
+
+        
+
+        window.registerAdmin = async () => {
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+            const authMessage = document.getElementById('authMessage');
+
+            if (password.length < 6) {
+                authMessage.textContent = "A senha deve ter pelo menos 6 caracteres.";
+                return;
+            }
+
+            try {
+                await createUserWithEmailAndPassword(window.auth, email, password);
+                authMessage.textContent = "Administrador registrado e logado com sucesso!";
+                authMessage.classList.remove('text-red-500');
+                authMessage.classList.add('text-green-600');
+            } catch (error) {
+                authMessage.textContent = `Erro no registro: ${error.message}`;
+                authMessage.classList.remove('text-green-600');
+                authMessage.classList.add('text-red-500');
+                console.error("Erro Firebase Auth:", error);
+            }
+        };
+
+        window.signInAdmin = async () => {
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+            const authMessage = document.getElementById('authMessage');
+
+            try {
+                await signInWithEmailAndPassword(window.auth, email, password);
+                authMessage.textContent = "Login efetuado com sucesso!";
+                authMessage.classList.remove('text-red-500');
+                authMessage.classList.add('text-green-600');
+            } catch (error) {
+                authMessage.textContent = "Erro de login: Email ou senha inválidos.";
+                authMessage.classList.remove('text-green-600');
+                authMessage.classList.add('text-red-500');
+                console.error("Erro Firebase Auth:", error);
+            }
+        };
+
+        window.signOutAdmin = async () => {
+            try {
+                await signOut(window.auth);
+                document.getElementById('authMessage').textContent = "Sessão encerrada.";
+                document.getElementById('authMessage').classList.remove('text-red-500');
+                document.getElementById('authMessage').classList.add('text-green-600');
+            } catch (error) {
+                console.error("Erro ao sair:", error);
+            }
+        };
+
+        
+        const handleAuthState = (user) => {
+            const authSection = document.getElementById('authSection');
+            const managementSection = document.getElementById('managementSection');
+            const adminEmailDisplay = document.getElementById('adminEmailDisplay');
+
+            if (user && user.email) {
+                
+                authSection.classList.add('hidden');
+                managementSection.classList.remove('hidden');
+                adminEmailDisplay.textContent = user.email;
+                window.userId = user.uid; 
+                listenForCodes();
+            } else if (user) {
+                
+                authSection.classList.add('hidden');
+                managementSection.classList.remove('hidden');
+                adminEmailDisplay.textContent = 'Auth Canvas (Anonimo)';
+                window.userId = user.uid;
+                listenForCodes();
+            } else {
+                
+                authSection.classList.remove('hidden');
+                managementSection.classList.add('hidden');
+                window.userId = null;
+            }
+        };
+
+
+        window.showModal = (code) => {
+            pendingRemoveCode = code;
+            document.getElementById('modalCodeDisplay').textContent = code;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        };
+
+        window.closeModal = () => {
+            pendingRemoveCode = null;
+            document.getElementById('confirmModal').classList.add('hidden');
+        };
+        
+        document.getElementById('confirmRemoveButton').onclick = () => {
+            if (pendingRemoveCode) {
+                removeCodeAction(pendingRemoveCode);
+            }
+            closeModal();
+        };
+
+
+      
+        
+        window.addCode = async () => {
+            if (!window.userId) {
+                document.getElementById('message').textContent = "ERRO: Faça login para adicionar códigos.";
+                return;
+            }
+
+            const codeInput = document.getElementById('code');
+            const nameInput = document.getElementById('name');
+            const emailInput = document.getElementById('email'); 
+            const message = document.getElementById('message');
+            const addButton = document.getElementById('addButton');
+            
+            const code = codeInput.value.toUpperCase().trim();
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+
+            if (!code || !name || !email) {
+                message.textContent = "Nome, Email e Código de Acesso são obrigatórios.";
+                message.classList.remove('text-green-600');
+                message.classList.add('text-red-500');
+                return;
+            }
+
+            const codeRef = ref(window.db, window.ACCESS_PATH + '/' + code);
+            
+            try {
+                addButton.disabled = true;
+                addButton.textContent = 'Adicionando...';
+
+                await set(codeRef, {
+                    name: name,
+                    email: email, 
+                    createdAt: new Date().toISOString(),
+                    registeredBy: window.userId 
+                });
+
+                message.textContent = `ódigo '${code}' para ${name} cadastrado com sucesso!`;
+                message.classList.remove('text-red-500');
+                message.classList.add('text-green-600');
+                
+              
+                codeInput.value = '';
+                nameInput.value = '';
+                emailInput.value = '';
+            } catch (error) {
+                message.textContent = `Erro ao salvar o código: ${error.message}`;
+                message.classList.remove('text-green-600');
+                message.classList.add('text-red-500');
+                console.error("Erro Firebase RTDB:", error);
+            } finally {
+                addButton.disabled = false;
+                addButton.textContent = 'Adicionar Código';
+            }
+        };
+
+        window.removeCode = (code) => {
+             if (!window.db || !window.userId) return;
+             showModal(code);
+        };
+        
+        const removeCodeAction = async (code) => {
+            const codeRef = ref(window.db, window.ACCESS_PATH + '/' + code);
+            try {
+                await remove(codeRef);
+                document.getElementById('message').textContent = `Código '${code}' removido com sucesso.`;
+                document.getElementById('message').classList.remove('text-red-500');
+                document.getElementById('message').classList.add('text-green-600');
+            } catch (error) {
+                document.getElementById('message').textContent = `Erro ao remover o código: ${error.message}`;
+                document.getElementById('message').classList.remove('text-green-600');
+                document.getElementById('message').classList.add('text-red-500');
+                console.error("Erro ao remover:", error);
+            }
+        };
+
+
+        const listenForCodes = () => {
+            if (!window.db) return;
+
+            const listRef = ref(window.db, window.ACCESS_PATH);
+            const codeList = document.getElementById('codeList');
+            const emptyMessage = document.getElementById('emptyMessage');
+
+            
+
+            onValue(listRef, (snapshot) => {
+                codeList.innerHTML = ''; 
+                const codes = snapshot.val();
+
+                if (!codes) {
+                    emptyMessage.classList.remove('hidden');
+                    return;
+                }
+                emptyMessage.classList.add('hidden');
+
+                Object.entries(codes).forEach(([code, data]) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex flex-col sm:flex-row justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-sm transition';
+                    item.innerHTML = `
+                        <div class="mb-2 sm:mb-0 text-center sm:text-left">
+                            <p class="text-lg font-bold text-gray-800">${data.name}</p>
+                            <p class="text-sm text-gray-600">Email: ${data.email || 'N/A'}</p>
+                            <p class="text-sm text-gray-600">Código de Acesso: <span class="font-mono bg-yellow-200 px-2 rounded">${code}</span></p>
+                        </div>
+                        <button onclick="removeCode('${code}')" class="text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-full hover:bg-red-100" title="Remover Código">
+                            <!-- Icone SVG de Lixeira -->
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    `;
+                    codeList.appendChild(item);
+                });
+            });
+        };
+        
+       
+
+        const initFirebase = async () => {
+            try {
+                const app = initializeApp(firebaseConfig);
+                window.auth = getAuth(app);
+                window.db = getDatabase(app); 
+
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(window.auth, initialAuthToken).catch(e => {
+                        console.warn("Falha na autenticação com token do Canvas. Aguardando login manual.", e);
+                    });
+                } else {
+                    await signInAnonymously(window.auth).catch(e => {
+                        console.error("Falha na autenticação anônima.", e);
+                    });
+                }
+                
+                
+                onAuthStateChanged(window.auth, handleAuthState);
+
+            } catch (error) {
+                console.error("Erro ao inicializar Firebase:", error);
+                document.getElementById('authMessage').textContent = `Erro de Configuração: ${error.message}`;
+            }
+        };
+        
+        initFirebase();
+    </script>
+</body>
+</html>
